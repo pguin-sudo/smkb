@@ -1,0 +1,21 @@
+listen: "0.0.0.0:4242"
+psk_file: "~/.config/smkb/psk"
+
+discovery:
+  mdns: true
+
+edge:
+  monitor: HDMI-A-1
+  side: right
+  poll_ms: 8
+
+pointer:
+  sensitivity: 1.0
+
+capture:
+  exclude: []
+  include_consumer_control: true
+
+safety:
+  panic_hotkey: [KEY_LEFTCTRL, KEY_LEFTALT, KEY_ESC]
+  watchdog_ms: 1000

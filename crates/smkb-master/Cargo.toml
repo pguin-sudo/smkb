@@ -1,0 +1,24 @@
+[package]
+name = "smkb-master"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "smkb-master"
+path = "src/main.rs"
+
+[dependencies]
+smkb-proto.workspace = true
+smkb-platform.workspace = true
+evdev.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_yaml_ng.workspace = true
+mdns-sd.workspace = true
+rand.workspace = true
+socket2.workspace = true

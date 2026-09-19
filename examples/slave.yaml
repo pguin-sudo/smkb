@@ -1,0 +1,11 @@
+# Example config for smkb-slave.
+# Copy to ~/.config/smkb/slave.yaml and adjust to your setup.
+
+# "auto" finds the master via mDNS; or set an explicit "host:port".
+master: auto
+
+# Must match the master's psk_file content exactly.
+psk_file: "~/.config/smkb/psk"
+
+reconnect:
+  interval_ms: 500

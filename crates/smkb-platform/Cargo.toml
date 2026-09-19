@@ -1,0 +1,16 @@
+[package]
+name = "smkb-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+smkb-proto.workspace = true
+tokio.workspace = true
+evdev.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+async-trait = "0.1"
+serde_json = "1"
