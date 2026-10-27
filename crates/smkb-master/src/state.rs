@@ -292,8 +292,11 @@ impl App {
                     let (pos, edge) = self.integrator.as_mut().expect("set on entering Captured").apply_delta(dx, dy);
                     self.send_unreliable_now(Frame::Event(InputEvent::Motion { x: pos.x, y: pos.y })).await;
                     if let Some(edge) = edge {
-                        tracing::info!(?edge, ?pos, "vcursor crossed slave-side edge");
-                        return Some(self.end_capture(Some(pos)).await);
+                        if edge == self.config.edge.side.opposite() {
+                            tracing::info!(?edge, ?pos, "vcursor crossed the doorway edge back to master");
+                            return Some(self.end_capture(Some(pos)).await);
+                        }
+                        tracing::debug!(?edge, ?pos, "vcursor hit a slave-side screen edge, clamping");
                     }
                 }
                 RawInputEvent::Key { code, pressed } => {

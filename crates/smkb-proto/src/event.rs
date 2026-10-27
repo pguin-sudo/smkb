@@ -29,6 +29,17 @@ pub enum Edge {
     Bottom,
 }
 
+impl Edge {
+    pub const fn opposite(self) -> Edge {
+        match self {
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Top,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum InputEvent {
     Motion { x: i32, y: i32 },
