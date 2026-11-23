@@ -1,16 +1,5 @@
 use serde::{Deserialize, Deserializer};
-use smkb_proto::{Edge, Psk};
-use std::path::{Path, PathBuf};
-
-pub fn expand_tilde(path: &str) -> PathBuf {
-    match path.strip_prefix('~') {
-        Some(rest) => {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
-            PathBuf::from(home).join(rest.trim_start_matches('/'))
-        }
-        None => PathBuf::from(path),
-    }
-}
+use smkb_proto::Edge;
 
 #[derive(Debug, Clone, Default)]
 pub enum AutoOr<T> {
@@ -29,7 +18,9 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for AutoOr<T> {
         }
         match Repr::<T>::deserialize(deserializer)? {
             Repr::Str(s) if s == "auto" => Ok(AutoOr::Auto),
-            Repr::Str(s) => Err(serde::de::Error::custom(format!("expected \"auto\" or a value, got string {s:?}"))),
+            Repr::Str(s) => Err(serde::de::Error::custom(format!(
+                "expected \"auto\" or a value, got string {s:?}"
+            ))),
             Repr::Val(v) => Ok(AutoOr::Fixed(v)),
         }
     }
@@ -79,7 +70,9 @@ pub struct PointerConfig {
 }
 impl Default for PointerConfig {
     fn default() -> Self {
-        Self { sensitivity: default_sensitivity() }
+        Self {
+            sensitivity: default_sensitivity(),
+        }
     }
 }
 fn default_sensitivity() -> f64 {
@@ -105,11 +98,18 @@ pub struct SafetyConfig {
 }
 impl Default for SafetyConfig {
     fn default() -> Self {
-        Self { panic_hotkey: default_panic_hotkey(), watchdog_ms: default_watchdog_ms() }
+        Self {
+            panic_hotkey: default_panic_hotkey(),
+            watchdog_ms: default_watchdog_ms(),
+        }
     }
 }
 fn default_panic_hotkey() -> Vec<String> {
-    vec!["KEY_LEFTCTRL".into(), "KEY_LEFTALT".into(), "KEY_ESC".into()]
+    vec![
+        "KEY_LEFTCTRL".into(),
+        "KEY_LEFTALT".into(),
+        "KEY_ESC".into(),
+    ]
 }
 fn default_watchdog_ms() -> u64 {
     1000
@@ -119,23 +119,30 @@ fn default_true() -> bool {
 }
 
 impl Config {
-    pub fn load(path: &Path) -> anyhow::Result<Config> {
-        let text = std::fs::read_to_string(path).map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
-        let config: Config = serde_yaml_ng::from_str(&text).map_err(|e| anyhow::anyhow!("parsing {}: {e}", path.display()))?;
-        Ok(config)
-    }
-
-    pub fn load_psk(&self) -> anyhow::Result<Psk> {
-        let path = expand_tilde(&self.psk_file);
-        let bytes = std::fs::read(&path).map_err(|e| anyhow::anyhow!("reading psk_file {}: {e}", path.display()))?;
-        smkb_proto::parse_psk(&bytes).map_err(|e| anyhow::anyhow!("psk_file {}: {e}", path.display()))
-    }
-
     pub fn panic_hotkey_codes(&self) -> anyhow::Result<Vec<u16>> {
         self.safety
             .panic_hotkey
             .iter()
-            .map(|name| name.parse::<evdev::KeyCode>().map(|k| k.0).map_err(|_| anyhow::anyhow!("unknown key name in safety.panic_hotkey: {name:?}")))
+            .map(|name| {
+                name.parse::<evdev::KeyCode>().map(|k| k.0).map_err(|_| {
+                    anyhow::anyhow!("unknown key name in safety.panic_hotkey: {name:?}")
+                })
+            })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn example_config_loads() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/master.yaml");
+        let config: Config = smkb_app::load_config(&path).unwrap();
+        assert_eq!(config.psk_file, "~/.config/smkb/psk");
+        assert_eq!(config.panic_hotkey_codes().unwrap(), vec![29, 56, 1]);
+        assert_eq!(config.edge.side, Edge::Right);
     }
 }

@@ -7,9 +7,15 @@ use crate::{PlatformError, Result};
 fn socket_path(file_name: &str) -> Result<PathBuf> {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .map_err(|_| PlatformError::Hyprland("XDG_RUNTIME_DIR is not set".into()))?;
-    let his = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
-        .map_err(|_| PlatformError::Hyprland("HYPRLAND_INSTANCE_SIGNATURE is not set (Hyprland not running?)".into()))?;
-    Ok(PathBuf::from(runtime_dir).join("hypr").join(his).join(file_name))
+    let his = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| {
+        PlatformError::Hyprland(
+            "HYPRLAND_INSTANCE_SIGNATURE is not set (Hyprland not running?)".into(),
+        )
+    })?;
+    Ok(PathBuf::from(runtime_dir)
+        .join("hypr")
+        .join(his)
+        .join(file_name))
 }
 
 pub fn control_socket_path() -> Result<PathBuf> {
@@ -43,14 +49,19 @@ pub async fn ctl(args: &str) -> Result<String> {
 
 pub async fn ctl_json(args: &str) -> Result<serde_json::Value> {
     let raw = request(&format!("j/{args}")).await?;
-    serde_json::from_str(&raw)
-        .map_err(|e| PlatformError::Hyprland(format!("parsing JSON response to `{args}`: {e} (raw: {raw})")))
+    serde_json::from_str(&raw).map_err(|e| {
+        PlatformError::Hyprland(format!(
+            "parsing JSON response to `{args}`: {e} (raw: {raw})"
+        ))
+    })
 }
 
 pub async fn ctl_ok(cmd: &str) -> Result<()> {
     let response = request(cmd).await?;
     if response.trim() != "ok" {
-        return Err(PlatformError::Hyprland(format!("`{cmd}` failed: {response}")));
+        return Err(PlatformError::Hyprland(format!(
+            "`{cmd}` failed: {response}"
+        )));
     }
     Ok(())
 }

@@ -9,6 +9,7 @@ name = "smkb-master"
 path = "src/main.rs"
 
 [dependencies]
+smkb-app.workspace = true
 smkb-proto.workspace = true
 smkb-platform.workspace = true
 evdev.workspace = true
@@ -18,7 +19,6 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
-serde_yaml_ng.workspace = true
 mdns-sd.workspace = true
 rand.workspace = true
 socket2.workspace = true

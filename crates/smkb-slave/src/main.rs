@@ -3,10 +3,10 @@ mod discovery;
 
 use anyhow::Context;
 use config::{Config, MasterAddr};
+use smkb_app::{parse_args, shutdown_signal};
 use smkb_platform::InputEmitter;
-use smkb_proto::{reliable::RETRANSMIT_INTERVAL, Frame, Handshake, HelloInfo, Psk, Session};
+use smkb_proto::{Frame, Handshake, HelloInfo, Psk, Session, reliable::RETRANSMIT_INTERVAL};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 
@@ -16,63 +16,24 @@ const HANDSHAKE_REPLY_TIMEOUT: Duration = Duration::from_millis(500);
 const MDNS_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PACKET: usize = smkb_proto::MAX_PACKET_LEN;
 
-fn default_config_path() -> PathBuf {
-    let base = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|| {
-        let home = std::env::var_os("HOME").unwrap_or_else(|| "/".into());
-        PathBuf::from(home).join(".config")
-    });
-    base.join("smkb").join("slave.yaml")
-}
-
-fn parse_args() -> PathBuf {
-    let mut config = default_config_path();
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--config" => config = args.next().map(PathBuf::from).unwrap_or_else(|| {
-                eprintln!("--config requires a path argument");
-                std::process::exit(2);
-            }),
-            "-h" | "--help" => {
-                println!("smkb-slave [--config PATH]\n\n--config PATH   config file (default: $XDG_CONFIG_HOME/smkb/slave.yaml)");
-                std::process::exit(0);
-            }
-            other => {
-                eprintln!("unknown argument: {other} (try --help)");
-                std::process::exit(2);
-            }
-        }
-    }
-    config
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = tokio::signal::ctrl_c();
-    let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to install SIGTERM handler, Ctrl+C still works");
-            std::future::pending().await
-        }
-    };
-    tokio::select! {
-        _ = ctrl_c => {}
-        _ = sigterm.recv() => {}
-    }
-}
-
 async fn resolve_master(config: &Config) -> anyhow::Result<SocketAddr> {
     match &config.master {
         MasterAddr::Auto => discovery::find_master(MDNS_DISCOVERY_TIMEOUT).await,
         MasterAddr::Explicit(s) => {
-            let mut addrs = tokio::net::lookup_host(s).await.with_context(|| format!("resolving master address {s:?}"))?;
-            addrs.next().ok_or_else(|| anyhow::anyhow!("master address {s:?} resolved to no addresses"))
+            let mut addrs = tokio::net::lookup_host(s)
+                .await
+                .with_context(|| format!("resolving master address {s:?}"))?;
+            addrs
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("master address {s:?} resolved to no addresses"))
         }
     }
 }
 
 fn local_hostname() -> String {
-    std::fs::read_to_string("/proc/sys/kernel/hostname").map(|s| s.trim().to_string()).unwrap_or_else(|_| "smkb-slave".to_string())
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "smkb-slave".to_string())
 }
 
 async fn handshake(socket: &UdpSocket, psk: &Psk) -> anyhow::Result<smkb_proto::SessionKeys> {
@@ -80,7 +41,10 @@ async fn handshake(socket: &UdpSocket, psk: &Psk) -> anyhow::Result<smkb_proto::
         let mut hs = Handshake::new_initiator(psk)?;
         let mut msg1 = [0u8; 256];
         let n1 = hs.write_message(&mut msg1)?;
-        socket.send(&msg1[..n1]).await.context("sending handshake message 1")?;
+        socket
+            .send(&msg1[..n1])
+            .await
+            .context("sending handshake message 1")?;
 
         let mut buf = [0u8; 256];
         match tokio::time::timeout(HANDSHAKE_REPLY_TIMEOUT, socket.recv(&mut buf)).await {
@@ -90,23 +54,39 @@ async fn handshake(socket: &UdpSocket, psk: &Psk) -> anyhow::Result<smkb_proto::
                 }
                 tracing::debug!(attempt, "handshake reply didn't parse, retrying");
             }
-            Ok(Err(e)) => tracing::debug!(attempt, error = %e, "recv error during handshake, retrying"),
+            Ok(Err(e)) => {
+                tracing::debug!(attempt, error = %e, "recv error during handshake, retrying")
+            }
             Err(_) => tracing::debug!(attempt, "no handshake reply within timeout, retrying"),
         }
     }
     anyhow::bail!("master did not complete the handshake after {HANDSHAKE_ATTEMPTS} attempts")
 }
 
-async fn run_session(master_addr: SocketAddr, psk: &Psk, emitter: &mut dyn InputEmitter, screen: smkb_proto::DisplayGeometry) -> anyhow::Result<()> {
-    let socket = UdpSocket::bind("0.0.0.0:0").await.context("binding local UDP socket")?;
-    socket.connect(master_addr).await.with_context(|| format!("connecting UDP socket to {master_addr}"))?;
+async fn run_session(
+    master_addr: SocketAddr,
+    psk: &Psk,
+    emitter: &mut dyn InputEmitter,
+    screen: smkb_proto::DisplayGeometry,
+) -> anyhow::Result<()> {
+    let socket = UdpSocket::bind("0.0.0.0:0")
+        .await
+        .context("binding local UDP socket")?;
+    socket
+        .connect(master_addr)
+        .await
+        .with_context(|| format!("connecting UDP socket to {master_addr}"))?;
     tracing::info!(%master_addr, "handshaking");
 
     let keys = handshake(&socket, psk).await?;
     let mut session = Session::new(keys);
     tracing::info!("handshake complete, sending Hello");
 
-    let hello = Frame::Hello(HelloInfo { proto_version: smkb_proto::PROTO_VERSION, hostname: local_hostname(), screen });
+    let hello = Frame::Hello(HelloInfo {
+        proto_version: smkb_proto::PROTO_VERSION,
+        hostname: local_hostname(),
+        screen,
+    });
     let pkt = session.send_reliable(&hello, Instant::now());
     socket.send(&pkt).await.context("sending Hello")?;
 
@@ -117,7 +97,11 @@ async fn run_session(master_addr: SocketAddr, psk: &Psk, emitter: &mut dyn Input
     result
 }
 
-async fn service_connection(socket: &UdpSocket, session: &mut Session, emitter: &mut dyn InputEmitter) -> anyhow::Result<()> {
+async fn service_connection(
+    socket: &UdpSocket,
+    session: &mut Session,
+    emitter: &mut dyn InputEmitter,
+) -> anyhow::Result<()> {
     let mut buf = vec![0u8; MAX_PACKET];
     let mut retransmit = tokio::time::interval(RETRANSMIT_INTERVAL);
     let mut last_activity = Instant::now();
@@ -165,7 +149,9 @@ async fn service_connection(socket: &UdpSocket, session: &mut Session, emitter: 
             }
         }
         if Instant::now().duration_since(last_activity) > WATCHDOG_TIMEOUT {
-            anyhow::bail!("no traffic from master for {WATCHDOG_TIMEOUT:?}, treating the connection as dead");
+            anyhow::bail!(
+                "no traffic from master for {WATCHDOG_TIMEOUT:?}, treating the connection as dead"
+            );
         }
     }
 }
@@ -173,17 +159,25 @@ async fn service_connection(socket: &UdpSocket, session: &mut Session, emitter: 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .init();
 
-    let config_path = parse_args();
-    let config = Config::load(&config_path).with_context(|| format!("loading config from {}", config_path.display()))?;
-    let psk = config.load_psk().context("loading psk_file")?;
+    let config_path = parse_args("slave");
+    let config = smkb_app::load_config::<Config>(&config_path)
+        .with_context(|| format!("loading config from {}", config_path.display()))?;
+    let psk = smkb_app::load_psk(&config.psk_file).context("loading psk_file")?;
 
-    let backend = smkb_platform::detect_slave().await.context("detecting a supported compositor")?;
+    let backend = smkb_platform::detect_slave()
+        .await
+        .context("detecting a supported compositor")?;
     let mut emitter = backend.emitter;
     let mut screen = backend.screen;
-    let geometry = screen.primary().await.context("reading local screen geometry")?;
+    let geometry = screen
+        .primary()
+        .await
+        .context("reading local screen geometry")?;
     tracing::info!(?geometry, "reporting this geometry to the master");
 
     let run = async {

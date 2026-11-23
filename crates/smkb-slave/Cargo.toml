@@ -9,6 +9,7 @@ name = "smkb-slave"
 path = "src/main.rs"
 
 [dependencies]
+smkb-app.workspace = true
 smkb-proto.workspace = true
 smkb-platform.workspace = true
 tokio.workspace = true
@@ -17,6 +18,5 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
-serde_yaml_ng.workspace = true
 mdns-sd.workspace = true
 socket2.workspace = true

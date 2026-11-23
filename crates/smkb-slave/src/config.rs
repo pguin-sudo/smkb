@@ -1,6 +1,4 @@
 use serde::Deserialize;
-use smkb_proto::Psk;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -19,7 +17,11 @@ pub enum MasterAddr {
 impl<'de> Deserialize<'de> for MasterAddr {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        if s == "auto" { Ok(MasterAddr::Auto) } else { Ok(MasterAddr::Explicit(s)) }
+        if s == "auto" {
+            Ok(MasterAddr::Auto)
+        } else {
+            Ok(MasterAddr::Explicit(s))
+        }
     }
 }
 
@@ -30,33 +32,26 @@ pub struct ReconnectConfig {
 }
 impl Default for ReconnectConfig {
     fn default() -> Self {
-        Self { interval_ms: default_interval_ms() }
+        Self {
+            interval_ms: default_interval_ms(),
+        }
     }
 }
 fn default_interval_ms() -> u64 {
     500
 }
 
-impl Config {
-    pub fn load(path: &Path) -> anyhow::Result<Config> {
-        let text = std::fs::read_to_string(path).map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
-        let config: Config = serde_yaml_ng::from_str(&text).map_err(|e| anyhow::anyhow!("parsing {}: {e}", path.display()))?;
-        Ok(config)
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    pub fn load_psk(&self) -> anyhow::Result<Psk> {
-        let path = expand_tilde(&self.psk_file);
-        let bytes = std::fs::read(&path).map_err(|e| anyhow::anyhow!("reading psk_file {}: {e}", path.display()))?;
-        smkb_proto::parse_psk(&bytes).map_err(|e| anyhow::anyhow!("psk_file {}: {e}", path.display()))
-    }
-}
-
-pub fn expand_tilde(path: &str) -> PathBuf {
-    match path.strip_prefix('~') {
-        Some(rest) => {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
-            PathBuf::from(home).join(rest.trim_start_matches('/'))
-        }
-        None => PathBuf::from(path),
+    #[test]
+    fn example_config_loads() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/slave.yaml");
+        let config: Config = smkb_app::load_config(&path).unwrap();
+        assert_eq!(config.psk_file, "~/.config/smkb/psk");
+        assert!(matches!(config.master, MasterAddr::Auto));
+        assert_eq!(config.reconnect.interval_ms, 500);
     }
 }

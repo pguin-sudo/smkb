@@ -15,7 +15,14 @@ impl Advertiser {
         let ip = local_ipv4()?;
         let hostname = format!("{}.local.", local_hostname());
         let instance = local_hostname();
-        let service = ServiceInfo::new(SERVICE_TYPE, &instance, &hostname, std::net::IpAddr::V4(ip), port, HashMap::<String, String>::new())?;
+        let service = ServiceInfo::new(
+            SERVICE_TYPE,
+            &instance,
+            &hostname,
+            std::net::IpAddr::V4(ip),
+            port,
+            HashMap::<String, String>::new(),
+        )?;
         let fullname = service.get_fullname().to_string();
         daemon.register(service)?;
         tracing::info!(%fullname, %ip, port, "advertising via mDNS");
@@ -39,5 +46,7 @@ fn local_ipv4() -> anyhow::Result<Ipv4Addr> {
 }
 
 fn local_hostname() -> String {
-    std::fs::read_to_string("/proc/sys/kernel/hostname").map(|s| s.trim().to_string()).unwrap_or_else(|_| "smkb-master".to_string())
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "smkb-master".to_string())
 }

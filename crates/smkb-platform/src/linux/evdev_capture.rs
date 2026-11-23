@@ -1,10 +1,12 @@
 use async_trait::async_trait;
-use evdev::{Device, EventSummary, EventStream, KeyCode, RelativeAxisCode};
+use evdev::{Device, EventStream, EventSummary, KeyCode, RelativeAxisCode};
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{CaptureBatch, DeviceInfo, DeviceKind, InputCapture, PlatformError, RawInputEvent, Result};
+use crate::{
+    CaptureBatch, DeviceInfo, DeviceKind, InputCapture, PlatformError, RawInputEvent, Result,
+};
 
 const OWN_DEVICE_PREFIX: &str = "smkb-";
 
@@ -17,12 +19,15 @@ fn classify(device: &Device) -> Option<DeviceKind> {
     let rel = device.supported_relative_axes();
 
     let is_pointer = keys.is_some_and(|k| k.contains(KeyCode::BTN_LEFT))
-        && rel.is_some_and(|r| r.contains(RelativeAxisCode::REL_X) && r.contains(RelativeAxisCode::REL_Y));
+        && rel.is_some_and(|r| {
+            r.contains(RelativeAxisCode::REL_X) && r.contains(RelativeAxisCode::REL_Y)
+        });
     if is_pointer {
         return Some(DeviceKind::Mouse);
     }
 
-    let is_typewriter = keys.is_some_and(|k| k.contains(KeyCode::KEY_A) && k.contains(KeyCode::KEY_SPACE));
+    let is_typewriter =
+        keys.is_some_and(|k| k.contains(KeyCode::KEY_A) && k.contains(KeyCode::KEY_SPACE));
     if is_typewriter {
         return Some(DeviceKind::Keyboard);
     }
@@ -38,7 +43,9 @@ fn glob_match(pattern: &str, text: &str) -> bool {
     let pattern = pattern.to_ascii_lowercase();
     let text = text.to_ascii_lowercase();
     match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
-        (Some(mid), _) if pattern.ends_with('*') && pattern.len() > 1 => text.contains(&mid[..mid.len() - 1]),
+        (Some(mid), _) if pattern.ends_with('*') && pattern.len() > 1 => {
+            text.contains(&mid[..mid.len() - 1])
+        }
         (Some(suffix), _) => text.ends_with(suffix),
         (_, Some(prefix)) => text.starts_with(prefix),
         _ => text == pattern,
@@ -62,11 +69,20 @@ impl EvdevCapture {
         let mut devices = Vec::new();
         for (path, device) in evdev::enumerate() {
             if let Some(kind) = classify(&device) {
-                devices.push(DeviceInfo { path, name: device.name().unwrap_or("<unnamed>").to_string(), kind });
+                devices.push(DeviceInfo {
+                    path,
+                    name: device.name().unwrap_or("<unnamed>").to_string(),
+                    kind,
+                });
             }
         }
         let (batch_tx, batch_rx) = mpsc::unbounded_channel();
-        Ok(Self { devices, workers: Vec::new(), batch_tx, batch_rx })
+        Ok(Self {
+            devices,
+            workers: Vec::new(),
+            batch_tx,
+            batch_rx,
+        })
     }
 }
 
@@ -82,9 +98,15 @@ impl InputCapture for EvdevCapture {
         Ok(())
     }
 
-    fn apply_filters(&mut self, explicit: Option<&[String]>, exclude_patterns: &[String], include_consumer_control: bool) {
+    fn apply_filters(
+        &mut self,
+        explicit: Option<&[String]>,
+        exclude_patterns: &[String],
+        include_consumer_control: bool,
+    ) {
         if let Some(paths) = explicit {
-            self.devices.retain(|d| paths.iter().any(|p| Path::new(p) == d.path));
+            self.devices
+                .retain(|d| paths.iter().any(|p| Path::new(p) == d.path));
             return;
         }
         self.devices.retain(|d| {
@@ -130,7 +152,10 @@ impl InputCapture for EvdevCapture {
             let (shutdown_tx, shutdown_rx) = oneshot::channel();
             let batch_tx = self.batch_tx.clone();
             let join = tokio::spawn(device_worker(stream, kind, shutdown_rx, batch_tx));
-            self.workers.push(Worker { shutdown: shutdown_tx, join });
+            self.workers.push(Worker {
+                shutdown: shutdown_tx,
+                join,
+            });
         }
         Ok(())
     }
@@ -165,7 +190,9 @@ fn open_and_grab(path: &Path) -> Result<Device> {
             }
         }
     }
-    Err(PlatformError::Io(last_err.expect("loop always sets last_err before exiting")))
+    Err(PlatformError::Io(
+        last_err.expect("loop always sets last_err before exiting"),
+    ))
 }
 
 async fn device_worker(
@@ -215,12 +242,20 @@ struct PendingBatch {
 impl PendingBatch {
     fn push(&mut self, event: evdev::InputEvent, kind: DeviceKind) -> bool {
         match event.destructure() {
-            EventSummary::Synchronization(_, code, _) => code == evdev::SynchronizationCode::SYN_REPORT,
+            EventSummary::Synchronization(_, code, _) => {
+                code == evdev::SynchronizationCode::SYN_REPORT
+            }
             EventSummary::Key(_, code, value) => {
                 let pressed = value != 0;
                 let raw = match kind {
-                    DeviceKind::Mouse => RawInputEvent::Button { code: code.0, pressed },
-                    DeviceKind::Keyboard | DeviceKind::ConsumerControl => RawInputEvent::Key { code: code.0, pressed },
+                    DeviceKind::Mouse => RawInputEvent::Button {
+                        code: code.0,
+                        pressed,
+                    },
+                    DeviceKind::Keyboard | DeviceKind::ConsumerControl => RawInputEvent::Key {
+                        code: code.0,
+                        pressed,
+                    },
                 };
                 self.others.push(raw);
                 false
@@ -244,7 +279,10 @@ impl PendingBatch {
     fn take(&mut self) -> CaptureBatch {
         let mut batch = std::mem::take(&mut self.others);
         if self.dx != 0 || self.dy != 0 {
-            batch.push(RawInputEvent::RelMotion { dx: self.dx, dy: self.dy });
+            batch.push(RawInputEvent::RelMotion {
+                dx: self.dx,
+                dy: self.dy,
+            });
         }
         let (dx, hi_res) = if self.wheel_hi_res != 0 || self.hwheel_hi_res != 0 {
             (self.hwheel_hi_res, true)

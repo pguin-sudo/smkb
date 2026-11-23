@@ -60,12 +60,23 @@ fn header(chan: Channel, seq: u32) -> [u8; HEADER_LEN] {
     h
 }
 
-pub fn encode(cipher: &ChaCha20Poly1305, chan: Channel, seq: u32, frame: &Frame) -> Result<Vec<u8>, WireError> {
+pub fn encode(
+    cipher: &ChaCha20Poly1305,
+    chan: Channel,
+    seq: u32,
+    frame: &Frame,
+) -> Result<Vec<u8>, WireError> {
     let plaintext = postcard::to_allocvec(frame)?;
     let hdr = header(chan, seq);
     let nonce = build_nonce(chan, seq);
     let ciphertext = cipher
-        .encrypt(&nonce, Payload { msg: &plaintext, aad: &hdr })
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: &plaintext,
+                aad: &hdr,
+            },
+        )
         .map_err(|_| WireError::Crypto)?;
     let mut out = Vec::with_capacity(HEADER_LEN + ciphertext.len());
     out.extend_from_slice(&hdr);
@@ -73,7 +84,10 @@ pub fn encode(cipher: &ChaCha20Poly1305, chan: Channel, seq: u32, frame: &Frame)
     Ok(out)
 }
 
-pub fn decode(cipher: &ChaCha20Poly1305, packet: &[u8]) -> Result<(Channel, u32, Frame), WireError> {
+pub fn decode(
+    cipher: &ChaCha20Poly1305,
+    packet: &[u8],
+) -> Result<(Channel, u32, Frame), WireError> {
     if packet.len() < HEADER_LEN + TAG_LEN {
         return Err(WireError::TooShort(packet.len()));
     }
@@ -86,7 +100,13 @@ pub fn decode(cipher: &ChaCha20Poly1305, packet: &[u8]) -> Result<(Channel, u32,
     let nonce = build_nonce(chan, seq);
     let ciphertext = &packet[HEADER_LEN..];
     let plaintext = cipher
-        .decrypt(&nonce, Payload { msg: ciphertext, aad: hdr })
+        .decrypt(
+            &nonce,
+            Payload {
+                msg: ciphertext,
+                aad: hdr,
+            },
+        )
         .map_err(|_| WireError::Crypto)?;
     let frame: Frame = postcard::from_bytes(&plaintext)?;
     Ok((chan, seq, frame))

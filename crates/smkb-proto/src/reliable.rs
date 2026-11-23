@@ -37,7 +37,14 @@ impl ReliableSender {
     }
 
     pub fn note_sent(&mut self, seq: u32, packet: Vec<u8>, now: Instant) {
-        self.pending.insert(seq, Pending { packet, first_sent: now, last_sent: now });
+        self.pending.insert(
+            seq,
+            Pending {
+                packet,
+                first_sent: now,
+                last_sent: now,
+            },
+        );
     }
 
     pub fn on_ack(&mut self, seq: u32) {
@@ -45,15 +52,8 @@ impl ReliableSender {
     }
 
     pub fn due_retransmits(&mut self, now: Instant) -> Vec<Vec<u8>> {
-        let expired: Vec<u32> = self
-            .pending
-            .iter()
-            .filter(|(_, p)| now.duration_since(p.first_sent) > RETRANSMIT_GIVEUP)
-            .map(|(&seq, _)| seq)
-            .collect();
-        for seq in expired {
-            self.pending.remove(&seq);
-        }
+        self.pending
+            .retain(|_, packet| now.duration_since(packet.first_sent) <= RETRANSMIT_GIVEUP);
 
         let mut due = Vec::new();
         for pkt in self.pending.values_mut() {
@@ -120,3 +120,45 @@ impl UnreliableReceiver {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retransmits_respect_interval_ack_and_expiry() {
+        let mut sender = ReliableSender::new();
+        let now = Instant::now();
+        sender.note_sent(0, vec![1], now);
+        sender.note_sent(1, vec![2], now);
+        sender.on_ack(1);
+        assert!(sender.due_retransmits(now).is_empty());
+        assert_eq!(
+            sender.due_retransmits(now + RETRANSMIT_INTERVAL),
+            vec![vec![1]]
+        );
+        assert!(sender.due_retransmits(now + RETRANSMIT_INTERVAL).is_empty());
+        assert_eq!(
+            sender.due_retransmits(now + RETRANSMIT_GIVEUP),
+            vec![vec![1]]
+        );
+        assert!(
+            sender
+                .due_retransmits(now + RETRANSMIT_GIVEUP + Duration::from_nanos(1))
+                .is_empty()
+        );
+        assert_eq!(sender.pending_count(), 0);
+    }
+
+    #[test]
+    fn expired_packets_do_not_prevent_newer_retransmits() {
+        let mut sender = ReliableSender::new();
+        let now = Instant::now();
+        sender.note_sent(0, vec![1], now);
+        sender.note_sent(1, vec![2], now + RETRANSMIT_GIVEUP);
+        assert_eq!(
+            sender.due_retransmits(now + RETRANSMIT_GIVEUP + RETRANSMIT_INTERVAL),
+            vec![vec![2]]
+        );
+        assert_eq!(sender.pending_count(), 1);
+    }
+}

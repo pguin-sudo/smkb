@@ -59,7 +59,12 @@ pub trait InputCapture: Send {
 
     fn rescan(&mut self) -> Result<()>;
 
-    fn apply_filters(&mut self, explicit: Option<&[String]>, exclude_patterns: &[String], include_consumer_control: bool);
+    fn apply_filters(
+        &mut self,
+        explicit: Option<&[String]>,
+        exclude_patterns: &[String],
+        include_consumer_control: bool,
+    );
 
     fn grab(&mut self) -> Result<()>;
 
@@ -114,7 +119,10 @@ pub async fn detect_master() -> Result<MasterBackend> {
     if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
         let cursor = hyprland::HyprlandCursor::new();
         let capture = linux::evdev_capture::EvdevCapture::discover()?;
-        return Ok(MasterBackend { capture: Box::new(capture), cursor: Box::new(cursor) });
+        return Ok(MasterBackend {
+            capture: Box::new(capture),
+            cursor: Box::new(cursor),
+        });
     }
     Err(PlatformError::NoBackend)
 }
@@ -124,7 +132,10 @@ pub async fn detect_slave() -> Result<SlaveBackend> {
         let mut screen = hyprland::HyprlandCursor::new();
         let geometry = ScreenInfo::primary(&mut screen).await?;
         let emitter = linux::uinput_emitter::UinputEmitter::new(geometry)?;
-        return Ok(SlaveBackend { emitter: Box::new(emitter), screen: Box::new(screen) });
+        return Ok(SlaveBackend {
+            emitter: Box::new(emitter),
+            screen: Box::new(screen),
+        });
     }
     Err(PlatformError::NoBackend)
 }

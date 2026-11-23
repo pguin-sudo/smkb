@@ -8,7 +8,10 @@ pub struct PanicHotkey {
 
 impl PanicHotkey {
     pub fn new(combo: Vec<u16>) -> Self {
-        Self { combo, held: HashSet::new() }
+        Self {
+            combo,
+            held: HashSet::new(),
+        }
     }
 
     pub fn observe(&mut self, code: u16, pressed: bool) -> bool {
@@ -33,7 +36,10 @@ pub struct Watchdog {
 
 impl Watchdog {
     pub fn new(timeout: Duration) -> Self {
-        Self { last_activity: Instant::now(), timeout }
+        Self {
+            last_activity: Instant::now(),
+            timeout,
+        }
     }
 
     pub fn poke(&mut self) {

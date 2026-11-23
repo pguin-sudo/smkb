@@ -72,7 +72,11 @@ impl Session {
                 Ok(Received { ready, reply })
             }
             Channel::Unreliable => {
-                let ready = if self.unreliable_rx.accept(seq) { vec![frame] } else { Vec::new() };
+                let ready = if self.unreliable_rx.accept(seq) {
+                    vec![frame]
+                } else {
+                    Vec::new()
+                };
                 Ok(Received { ready, reply: None })
             }
             Channel::Control => {
@@ -83,7 +87,10 @@ impl Session {
                     self.reliable_tx.on_ack(acked_seq);
                     Ok(Received::default())
                 } else {
-                    Ok(Received { ready: vec![frame], reply: None })
+                    Ok(Received {
+                        ready: vec![frame],
+                        reply: None,
+                    })
                 }
             }
         }
@@ -93,4 +100,3 @@ impl Session {
 fn encode(keys: &SessionKeys, chan: Channel, seq: u32, frame: &Frame) -> Vec<u8> {
     wire::encode(&keys.send, chan, seq, frame).expect("encoding a well-formed Frame cannot fail")
 }
-

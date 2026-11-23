@@ -1,5 +1,8 @@
 use evdev::uinput::VirtualDevice;
-use evdev::{AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent as EvdevEvent, KeyCode, PropType, RelativeAxisCode, UinputAbsSetup};
+use evdev::{
+    AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent as EvdevEvent, KeyCode,
+    PropType, RelativeAxisCode, UinputAbsSetup,
+};
 use std::collections::HashSet;
 
 use crate::{InputEmitter, PlatformError, Result};
@@ -59,8 +62,14 @@ impl UinputEmitter {
         let mut props = AttributeSet::<PropType>::new();
         props.insert(PropType::POINTER);
 
-        let abs_x = UinputAbsSetup::new(AbsoluteAxisCode::ABS_X, AbsInfo::new(0, 0, screen.width.saturating_sub(1) as i32, 0, 0, 0));
-        let abs_y = UinputAbsSetup::new(AbsoluteAxisCode::ABS_Y, AbsInfo::new(0, 0, screen.height.saturating_sub(1) as i32, 0, 0, 0));
+        let abs_x = UinputAbsSetup::new(
+            AbsoluteAxisCode::ABS_X,
+            AbsInfo::new(0, 0, screen.width.saturating_sub(1) as i32, 0, 0, 0),
+        );
+        let abs_y = UinputAbsSetup::new(
+            AbsoluteAxisCode::ABS_Y,
+            AbsInfo::new(0, 0, screen.height.saturating_sub(1) as i32, 0, 0, 0),
+        );
 
         let pointer = VirtualDevice::builder()
             .map_err(PlatformError::Io)?
@@ -90,7 +99,12 @@ impl UinputEmitter {
             .build()
             .map_err(PlatformError::Io)?;
 
-        Ok(Self { pointer, keyboard, held_keys: HashSet::new(), held_buttons: HashSet::new() })
+        Ok(Self {
+            pointer,
+            keyboard,
+            held_keys: HashSet::new(),
+            held_buttons: HashSet::new(),
+        })
     }
 }
 
@@ -99,7 +113,10 @@ impl InputEmitter for UinputEmitter {
         match event {
             InputEvent::Motion { x, y } => self
                 .pointer
-                .emit(&[abs_event(AbsoluteAxisCode::ABS_X, *x), abs_event(AbsoluteAxisCode::ABS_Y, *y)])
+                .emit(&[
+                    abs_event(AbsoluteAxisCode::ABS_X, *x),
+                    abs_event(AbsoluteAxisCode::ABS_Y, *y),
+                ])
                 .map_err(PlatformError::Io),
 
             InputEvent::Button { code, pressed, at } => {
@@ -115,14 +132,19 @@ impl InputEmitter for UinputEmitter {
             }
 
             InputEvent::Key { code, pressed } => {
-                self.keyboard.emit(&[key_event(*code, *pressed)]).map_err(PlatformError::Io)?;
+                self.keyboard
+                    .emit(&[key_event(*code, *pressed)])
+                    .map_err(PlatformError::Io)?;
                 track(&mut self.held_keys, *code, *pressed);
                 Ok(())
             }
 
             InputEvent::Scroll { dx, dy, hi_res } => {
                 let (x_axis, y_axis) = if *hi_res {
-                    (RelativeAxisCode::REL_HWHEEL_HI_RES, RelativeAxisCode::REL_WHEEL_HI_RES)
+                    (
+                        RelativeAxisCode::REL_HWHEEL_HI_RES,
+                        RelativeAxisCode::REL_WHEEL_HI_RES,
+                    )
                 } else {
                     (RelativeAxisCode::REL_HWHEEL, RelativeAxisCode::REL_WHEEL)
                 };
@@ -141,7 +163,10 @@ impl InputEmitter for UinputEmitter {
 
             InputEvent::Enter { at } => self
                 .pointer
-                .emit(&[abs_event(AbsoluteAxisCode::ABS_X, at.x), abs_event(AbsoluteAxisCode::ABS_Y, at.y)])
+                .emit(&[
+                    abs_event(AbsoluteAxisCode::ABS_X, at.x),
+                    abs_event(AbsoluteAxisCode::ABS_Y, at.y),
+                ])
                 .map_err(PlatformError::Io),
 
             InputEvent::Leave => Ok(()),
@@ -151,11 +176,19 @@ impl InputEmitter for UinputEmitter {
     }
 
     fn release_all(&mut self) -> Result<()> {
-        let key_ups: Vec<_> = self.held_keys.drain().map(|code| key_event(code, false)).collect();
+        let key_ups: Vec<_> = self
+            .held_keys
+            .drain()
+            .map(|code| key_event(code, false))
+            .collect();
         if !key_ups.is_empty() {
             self.keyboard.emit(&key_ups).map_err(PlatformError::Io)?;
         }
-        let button_ups: Vec<_> = self.held_buttons.drain().map(|code| key_event(code, false)).collect();
+        let button_ups: Vec<_> = self
+            .held_buttons
+            .drain()
+            .map(|code| key_event(code, false))
+            .collect();
         if !button_ups.is_empty() {
             self.pointer.emit(&button_ups).map_err(PlatformError::Io)?;
         }

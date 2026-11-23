@@ -1,0 +1,13 @@
+[package]
+name = "smkb-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+smkb-proto.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_yaml_ng.workspace = true

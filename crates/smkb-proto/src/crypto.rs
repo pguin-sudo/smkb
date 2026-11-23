@@ -58,15 +58,25 @@ pub struct Handshake {
 
 impl Handshake {
     pub fn new_initiator(psk: &Psk) -> Result<Self, CryptoError> {
-        let params = NOISE_PATTERN.parse().expect("static pattern string is valid");
+        let params = NOISE_PATTERN
+            .parse()
+            .expect("static pattern string is valid");
         let state = snow::Builder::new(params).psk(0, psk)?.build_initiator()?;
-        Ok(Self { state, initiator: true })
+        Ok(Self {
+            state,
+            initiator: true,
+        })
     }
 
     pub fn new_responder(psk: &Psk) -> Result<Self, CryptoError> {
-        let params = NOISE_PATTERN.parse().expect("static pattern string is valid");
+        let params = NOISE_PATTERN
+            .parse()
+            .expect("static pattern string is valid");
         let state = snow::Builder::new(params).psk(0, psk)?.build_responder()?;
-        Ok(Self { state, initiator: false })
+        Ok(Self {
+            state,
+            initiator: false,
+        })
     }
 
     pub fn is_finished(&self) -> bool {
@@ -88,8 +98,11 @@ impl Handshake {
             return Err(CryptoError::NotFinished);
         }
         let (k_initiator, k_responder) = self.state.dangerously_get_raw_split();
-        let (send_bytes, recv_bytes) =
-            if self.initiator { (k_initiator, k_responder) } else { (k_responder, k_initiator) };
+        let (send_bytes, recv_bytes) = if self.initiator {
+            (k_initiator, k_responder)
+        } else {
+            (k_responder, k_initiator)
+        };
         Ok(SessionKeys {
             send: ChaCha20Poly1305::new_from_slice(&send_bytes).expect("32-byte key"),
             recv: ChaCha20Poly1305::new_from_slice(&recv_bytes).expect("32-byte key"),
